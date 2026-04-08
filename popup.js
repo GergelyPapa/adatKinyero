@@ -1,6 +1,6 @@
 // ============================================
-// Document Extractor - Popup Script v4
-// SIMPLE & DEBUG VERSION
+// Document Extractor - Popup Script v5
+// FIXED: Async handling in executeScript
 // ============================================
 
 let extractedDocuments = [];
@@ -36,226 +36,200 @@ function extractDocuments() {
         const tabUrl = tabs[0].url;
         console.log('Tab ID:', tabId, 'URL:', tabUrl);
         
-        // Egyszerű test: számokat jár az oldal?
+        // Közvetlen extraction - nem kell teszt
         chrome.scripting.executeScript({
             target: { tabId: tabId },
-            function: simpleTest
+            function: extractOnPage,
+            args: [findLinks, findText, findImages]
         }, (results) => {
-            console.log('Test results:', results);
+            console.log('Extraction results:', results);
+            showLoading(false);
             
             if (chrome.runtime.lastError) {
                 console.error('Runtime error:', chrome.runtime.lastError);
-                showLoading(false);
                 showStatus('Script injection hiba: ' + chrome.runtime.lastError.message, 'error');
                 return;
             }
             
-            if (results && results[0]) {
-                console.log('Test OK, result:', results[0].result);
-                // Most az igazi extrakció
-                actualExtraction(tabId, findLinks, findText, findImages);
+            if (results && results[0] && results[0].result) {
+                const docs = results[0].result;
+                console.log('Documents received:', docs.length);
+                console.log('Sample documents:', docs.slice(0, 3));
+                
+                extractedDocuments = docs;
+                updateUI();
+            } else {
+                console.warn('No result from extraction');
+                showStatus('Nincs eredmény az extrakciótól!', 'error');
             }
         });
     });
 }
 
 // ============================================
-// TEST: Valóban fut-e a script az oldalon?
+// EXTRACT FUNCTION - SZINKRON VERZIÓ
+// (ez fut az oldalon)
 // ============================================
-function simpleTest() {
-    console.log('TEST: Script futott az oldalon!');
-    console.log('Document title:', document.title);
-    console.log('Links count:', document.querySelectorAll('a[href]').length);
-    console.log('Paragraphs count:', document.querySelectorAll('p').length);
-    console.log('Images count:', document.querySelectorAll('img').length);
-    
-    return {
-        title: document.title,
-        linksCount: document.querySelectorAll('a[href]').length,
-        paragraphsCount: document.querySelectorAll('p').length,
-        imagesCount: document.querySelectorAll('img').length
-    };
-}
-
-// ============================================
-// IGAZI EXTRAKCIÓ (2. lépésben)
-// ============================================
-function actualExtraction(tabId, findLinks, findText, findImages) {
-    console.log('=== Starting actual extraction ===');
-    
-    chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        function: extractOnPage,
-        args: [findLinks, findText, findImages]
-    }, (results) => {
-        console.log('Extraction results:', results);
-        showLoading(false);
-        
-        if (chrome.runtime.lastError) {
-            console.error('Extraction error:', chrome.runtime.lastError);
-            showStatus('Extrakció hiba: ' + chrome.runtime.lastError.message, 'error');
-            return;
-        }
-        
-        if (results && results[0] && results[0].result) {
-            const docs = results[0].result;
-            console.log('Documents received:', docs.length);
-            console.log('Documents:', docs);
-            
-            extractedDocuments = docs;
-            updateUI();
-        } else {
-            console.warn('No result from extraction');
-            showStatus('Nincs eredmény az extrakciótól!', 'error');
-        }
-    });
-}
-
-// ============================================
-// WAIT FOR PAGE LOAD
-// ============================================
-function waitForPageLoad(maxWait = 3000) {
-    return new Promise((resolve) => {
-        console.log('Waiting for page to load...');
-        
-        const startTime = Date.now();
-        const checkInterval = setInterval(() => {
-            const loaded = document.readyState === 'complete';
-            const hasContent = document.body.innerText.length > 500;
-            const elapsed = Date.now() - startTime;
-            
-            console.log(`  Status: readyState=${document.readyState}, hasContent=${hasContent}, elapsed=${elapsed}ms`);
-            
-            if ((loaded && hasContent) || elapsed > maxWait) {
-                clearInterval(checkInterval);
-                console.log('Page ready, proceeding with extraction');
-                resolve();
-            }
-        }, 200);
-    });
-}
-
-// ============================================
-// EXTRACT FUNCTION (az oldalon futó kód)
-// ============================================
-async function extractOnPage(findLinks, findText, findImages) {
-    console.log('=== extractOnPage running ===');
+function extractOnPage(findLinks, findText, findImages) {
+    console.log('=== extractOnPage START ===');
     console.log('Parameters:', { findLinks, findText, findImages });
-    
-    // Várunk az oldal betöltésére
-    await waitForPageLoad(3000);
     
     let documents = [];
     
     try {
-        // LINKEK
+        // Várakozás az oldal betöltésére
+        console.log('Waiting for page to be ready...');
+        
+        // Egyszerű várakozás: 2 másodperc
+        const startTime = new Date();
+        while (new Date() - startTime < 2000) {
+            // Várakozás
+        }
+        
+        console.log('Proceeding with extraction...');
+        
+        // LINKEK KINYERÉSE
         if (findLinks) {
             console.log('→ Extracting links...');
             const links = [];
             
-            document.querySelectorAll('a[href]').forEach((link) => {
-                try {
+            try {
+                document.querySelectorAll('a[href]').forEach((link) => {
                     const href = link.getAttribute('href');
                     const text = link.textContent.trim();
                     
-                    if (!href) return;
+                    if (!href || href.length === 0) return;
+                    if (text.length === 0) return;
                     
                     let fullUrl = href;
-                    if (!href.startsWith('http')) {
-                        fullUrl = new URL(href, window.location.href).href;
+                    try {
+                        if (!href.startsWith('http')) {
+                            fullUrl = new URL(href, window.location.href).href;
+                        }
+                    } catch (e) {
+                        fullUrl = href;
                     }
                     
-                    links.push({
-                        name: text || 'Link',
-                        type: 'Link',
-                        url: fullUrl,
-                        source: 'link'
-                    });
-                } catch (e) {
-                    console.error('Link error:', e);
-                }
-            });
+                    if (fullUrl.length > 5) {
+                        links.push({
+                            name: text.substring(0, 100) || 'Link',
+                            type: 'Link',
+                            url: fullUrl,
+                            source: 'link'
+                        });
+                    }
+                });
+            } catch (e) {
+                console.error('Link extraction error:', e);
+            }
             
             console.log('  Found links:', links.length);
             documents = documents.concat(links);
         }
         
-        // SZÖVEGEK + ÁRAK
+        // SZÖVEGEK + ÁRAK KINYERÉSE
         if (findText) {
             console.log('→ Extracting text and prices...');
             const texts = [];
             
-            // Árak keresése
-            const priceRegex = /\d+\s*[FfFt]{2}|\d+\s*€|\d+\s*Ft|\d+\s*ft/g;
-            const pageText = document.body.innerText;
-            const prices = pageText.match(priceRegex) || [];
-            
-            console.log('  Found prices:', prices.length);
-            prices.slice(0, 50).forEach((price) => {
-                texts.push({
-                    name: price.trim(),
-                    type: 'Ár',
-                    url: window.location.href,
-                    source: 'price'
-                });
-            });
-            
-            // Termékok/szövegek keresése
-            const keywords = ['kandallo', 'termék', 'ár', 'price', 'product', 'file', 'pdf', 'sparhelt', 'kemence', 'grill'];
-            
-            document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, div').forEach((el) => {
-                try {
-                    const text = el.textContent.trim();
-                    if (text.length < 5 || text.length > 200) return;
+            try {
+                // ÁRAK - regex keresés
+                const priceRegex = /\d+\s*[Ff][Tt]|\d+\s*[Ff]{2}|\d+\s*€/g;
+                const pageText = document.body.innerText;
+                
+                if (pageText && pageText.length > 0) {
+                    const prices = pageText.match(priceRegex) || [];
                     
-                    // Szűrés: csak egy szó egy div-ből, redundancia elkerülésé
-                    const wordCount = text.split(/\s+/).length;
-                    if (wordCount > 50) return; // Túl hosszú
+                    console.log('  Found prices:', prices.length);
                     
-                    if (keywords.some(kw => text.toLowerCase().includes(kw))) {
-                        texts.push({
-                            name: text.substring(0, 150),
-                            type: 'Termék',
-                            url: window.location.href,
-                            source: 'text'
-                        });
-                    }
-                } catch (e) {
-                    // Silent
+                    // Max 100 ár
+                    const uniquePrices = new Set();
+                    prices.slice(0, 200).forEach((price) => {
+                        const cleanPrice = price.trim();
+                        if (cleanPrice.length > 0 && !uniquePrices.has(cleanPrice)) {
+                            uniquePrices.add(cleanPrice);
+                            texts.push({
+                                name: cleanPrice,
+                                type: 'Ár',
+                                url: window.location.href,
+                                source: 'price'
+                            });
+                            
+                            if (uniquePrices.size >= 100) return;
+                        }
+                    });
+                    
+                    console.log('  Added prices:', texts.length);
                 }
-            });
+            } catch (e) {
+                console.error('Price extraction error:', e);
+            }
             
-            console.log('  Found texts:', texts.length);
+            // TERMÉKES SZÖVEGEK
+            try {
+                const keywords = ['kandallo', 'termék', 'ár', 'product', 'price', 'sparhelt', 'kemence', 'grill', 'füst', 'kályha'];
+                
+                document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span').forEach((el) => {
+                    try {
+                        const text = el.textContent.trim();
+                        if (text.length < 5 || text.length > 200) return;
+                        
+                        const wordCount = text.split(/\s+/).length;
+                        if (wordCount > 50) return;
+                        
+                        if (keywords.some(kw => text.toLowerCase().includes(kw))) {
+                            texts.push({
+                                name: text.substring(0, 150),
+                                type: 'Termék',
+                                url: window.location.href,
+                                source: 'text'
+                            });
+                        }
+                    } catch (e) {
+                        // Silent
+                    }
+                });
+            } catch (e) {
+                console.error('Text extraction error:', e);
+            }
+            
+            console.log('  Total texts:', texts.length);
             documents = documents.concat(texts);
         }
         
-        // KÉPEK
+        // KÉPEK KINYERÉSE
         if (findImages) {
             console.log('→ Extracting images...');
             const images = [];
             
-            document.querySelectorAll('img').forEach((img) => {
-                try {
+            try {
+                document.querySelectorAll('img').forEach((img) => {
                     const src = img.getAttribute('src');
                     const alt = img.getAttribute('alt');
                     
-                    if (!src) return;
+                    if (!src || src.length === 0) return;
                     
                     let fullUrl = src;
-                    if (!src.startsWith('http')) {
-                        fullUrl = new URL(src, window.location.href).href;
+                    try {
+                        if (!src.startsWith('http')) {
+                            fullUrl = new URL(src, window.location.href).href;
+                        }
+                    } catch (e) {
+                        fullUrl = src;
                     }
                     
-                    images.push({
-                        name: alt || 'Image',
-                        type: '.jpg',
-                        url: fullUrl,
-                        source: 'image'
-                    });
-                } catch (e) {
-                    console.error('Image error:', e);
-                }
-            });
+                    if (fullUrl.length > 5) {
+                        images.push({
+                            name: alt || 'Image',
+                            type: 'Kép',
+                            url: fullUrl,
+                            source: 'image'
+                        });
+                    }
+                });
+            } catch (e) {
+                console.error('Image extraction error:', e);
+            }
             
             console.log('  Found images:', images.length);
             documents = documents.concat(images);
@@ -264,7 +238,7 @@ async function extractOnPage(findLinks, findText, findImages) {
         // DEDUPE
         documents = removeDuplicates(documents);
         
-        console.log('Final result:', documents.length, 'documents');
+        console.log('=== Final result:', documents.length, 'documents ===');
         return documents;
         
     } catch (error) {
@@ -279,7 +253,7 @@ async function extractOnPage(findLinks, findText, findImages) {
 function removeDuplicates(documents) {
     const seen = new Set();
     return documents.filter(doc => {
-        const key = (doc.name || '') + (doc.url || '');
+        const key = (doc.name || '') + '|' + (doc.url || '');
         if (seen.has(key)) {
             return false;
         }
@@ -397,7 +371,7 @@ function clearResults() {
     const exportBtn = document.getElementById('export-btn');
     
     if (info) {
-        info.textContent = 'Még nem kereseztünk dokumentumokat.';
+        info.textContent = 'Még nem kerestünk dokumentumokat.';
     }
     if (exportBtn) {
         exportBtn.disabled = true;
