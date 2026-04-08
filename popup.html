@@ -271,12 +271,12 @@
                 </label>
             </div>
             
-            <button class="btn-extract" onclick="extractDocuments()">🔍 Dokumentumok Lekérése</button>
+            <button class="btn-extract" id="extract-btn">🔍 Dokumentumok Lekérése</button>
         </div>
         
         <div class="card">
             <h2>⚙️ Beállítások</h2>
-            <button class="settings-toggle" onclick="toggleSettings()">+ Haladó beállítások</button>
+            <button class="settings-toggle" id="settings-toggle-btn">+ Haladó beállítások</button>
             
             <div id="settings" class="settings">
                 <div class="input-group">
@@ -311,10 +311,10 @@
             <p id="doc-info">Még nem kereseztünk dokumentumokat.</p>
             
             <div class="button-group">
-                <button class="btn-export" id="export-btn" disabled onclick="exportToExcel()">
+                <button class="btn-export" id="export-btn" disabled>
                     📥 Excel Export
                 </button>
-                <button class="btn-clear" onclick="clearResults()">🗑️ Törlés</button>
+                <button class="btn-clear" id="clear-btn">🗑️ Törlés</button>
             </div>
         </div>
         

@@ -434,34 +434,59 @@ function toggleSettings() {
 // INICIALIZÁLÁS
 // ============================================
 
+// ============================================
+// EVENT LISTENER HOZZÁADÁSA (CSP compliance)
+// ============================================
+
 document.addEventListener('DOMContentLoaded', () => {
     console.log('=== Popup Loading ===');
     
-    // Event listenerek
-    const extractBtn = document.querySelector('.btn-extract');
-    const settingsBtn = document.querySelector('.settings-toggle');
-    const exportBtn = document.getElementById('export-btn');
-    const clearBtn = document.querySelector('.btn-clear');
-    
+    // Extract button (ID-vel, nem class-szal!)
+    const extractBtn = document.getElementById('extract-btn');
     if (extractBtn) {
         extractBtn.addEventListener('click', () => {
             console.log('Extract button clicked');
             extractDocuments();
         });
+        console.log('✓ Extract button listener added');
     } else {
-        console.error('Extract button not found!');
+        console.error('❌ Extract button NOT found!');
     }
     
+    // Settings toggle button
+    const settingsBtn = document.getElementById('settings-toggle-btn');
     if (settingsBtn) {
-        settingsBtn.addEventListener('click', toggleSettings);
+        settingsBtn.addEventListener('click', () => {
+            console.log('Settings toggle clicked');
+            toggleSettings();
+        });
+        console.log('✓ Settings toggle listener added');
+    } else {
+        console.error('❌ Settings toggle button NOT found!');
     }
     
+    // Export button
+    const exportBtn = document.getElementById('export-btn');
     if (exportBtn) {
-        exportBtn.addEventListener('click', exportToExcel);
+        exportBtn.addEventListener('click', () => {
+            console.log('Export button clicked');
+            exportToExcel();
+        });
+        console.log('✓ Export button listener added');
+    } else {
+        console.error('❌ Export button NOT found!');
     }
     
+    // Clear button
+    const clearBtn = document.getElementById('clear-btn');
     if (clearBtn) {
-        clearBtn.addEventListener('click', clearResults);
+        clearBtn.addEventListener('click', () => {
+            console.log('Clear button clicked');
+            clearResults();
+        });
+        console.log('✓ Clear button listener added');
+    } else {
+        console.error('❌ Clear button NOT found!');
     }
     
     console.log('=== Popup Ready ===');
