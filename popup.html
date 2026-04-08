@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Extractor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            width: 400px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+        
+        .container {
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+        
+        .card p {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            font-size: 0.85em;
+            color: #667eea;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.85em;
+        }
+        
+        input[type="checkbox"] {
+            cursor: pointer;
+        }
+        
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-extract {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-extract:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-extract:active {
+            transform: scale(0.98);
+        }
+        
+        .btn-export {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .btn-export:hover {
+            background: #45a049;
+        }
+        
+        .btn-export:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .btn-clear {
+            background: #f44336;
+            color: white;
+            grid-column: 1 / -1;
+        }
+        
+        .btn-clear:hover {
+            background: #da190b;
+        }
+        
+        .status {
+            background: #f5f5f5;
+            border-left: 4px solid #667eea;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-size: 0.85em;
+            color: #666;
+        }
+        
+        .status.success {
+            border-left-color: #4caf50;
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .status.error {
+            border-left-color: #f44336;
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 10px;
+            color: white;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .spinner {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .document-count {
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .settings-toggle {
+            background: white;
+            border: none;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 0.8em;
+            padding: 5px 10px;
+            border-radius: 3px;
+            margin-top: 10px;
+        }
+        
+        .settings-toggle:hover {
+            background: #f5f5f5;
+        }
+        
+        .settings {
+            display: none;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+        }
+        
+        .settings.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 Document Extractor</h1>
+            <p>Weboldal dokumentumait Excel-be!</p>
+        </div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Dokumentumok keresése...</p>
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div class="card">
+            <h2>🎯 Dokumentum Keresés</h2>
+            <p>Válaszd ki, milyen típusú dokumentumokat keresünk:</p>
+            
+            <div class="checkbox-group">
+                <label class="checkbox-item">
+                    <input type="checkbox" id="find-links" checked> Linkek
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="find-text" checked> Szöveg
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="find-images" checked> Képek
+                </label>
+            </div>
+            
+            <button class="btn-extract" onclick="extractDocuments()">🔍 Dokumentumok Lekérése</button>
+        </div>
+        
+        <div class="card">
+            <h2>⚙️ Beállítások</h2>
+            <button class="settings-toggle" onclick="toggleSettings()">+ Haladó beállítások</button>
+            
+            <div id="settings" class="settings">
+                <div class="input-group">
+                    <label>Fájl neve:</label>
+                    <input type="text" id="filename" placeholder="dokumentumok" value="dokumentumok">
+                </div>
+                
+                <div class="input-group">
+                    <label>Szűrés (opcionális):</label>
+                    <input type="text" id="filter" placeholder="pl. .pdf, .doc">
+                </div>
+                
+                <div class="input-group">
+                    <label>Oszlopok:</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="col-name" checked> Név
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="col-type" checked> Típus
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="col-url" checked> URL
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>📊 Eredmény</h2>
+            <p id="doc-info">Még nem kereseztünk dokumentumokat.</p>
+            
+            <div class="button-group">
+                <button class="btn-export" id="export-btn" disabled onclick="exportToExcel()">
+                    📥 Excel Export
+                </button>
+                <button class="btn-clear" onclick="clearResults()">🗑️ Törlés</button>
+            </div>
+        </div>
+        
+        <div style="text-align: center; color: white; font-size: 0.8em; margin-top: 20px;">
+            <p>v1.0 | Document Extractor</p>
+        </div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
