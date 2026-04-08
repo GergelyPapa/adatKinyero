@@ -1,13 +1,15 @@
-// Service Worker (Background script)
+// Service Worker (Background script) - Manifest V3
 // Chrome bővítmény háttérben futó logikája
 
-chrome.runtime.onInstalled.addListener(() => {
+// Bővítmény telepítéskor
+chrome.runtime.onInstalled.addListener(async () => {
     console.log('Document Extractor - Bővítmény telepítve!');
     
     // Default beállítások
-    chrome.storage.local.get(['filename', 'filter'], (result) => {
+    try {
+        const result = await chrome.storage.local.get(['filename', 'filter']);
         if (!result.filename) {
-            chrome.storage.local.set({
+            await chrome.storage.local.set({
                 filename: 'dokumentumok',
                 filter: '',
                 colName: true,
@@ -15,20 +17,30 @@ chrome.runtime.onInstalled.addListener(() => {
                 colUrl: true
             });
         }
-    });
+    } catch (error) {
+        console.error('Storage inicializálási hiba:', error);
+    }
+    
+    // Context menu létrehozása
+    try {
+        await chrome.contextMenus.create({
+            id: 'extract-docs',
+            title: 'Dokumentumok keresése',
+            contexts: ['page', 'link', 'image']
+        });
+    } catch (error) {
+        console.log('Context menu már létezik vagy hiba:', error);
+    }
 });
 
-// Context menu - jobb klikk menü
-chrome.contextMenus.create({
-    id: 'extract-docs',
-    title: 'Dokumentumok keresése',
-    contexts: ['page', 'link', 'image']
-});
-
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+// Context menu kattintás
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId === 'extract-docs') {
-        // Popup megnyitása
-        chrome.action.openPopup();
+        try {
+            await chrome.action.openPopup();
+        } catch (error) {
+            console.error('Popup megnyitási hiba:', error);
+        }
     }
 });
 
