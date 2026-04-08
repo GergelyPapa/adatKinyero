@@ -112,11 +112,38 @@ function actualExtraction(tabId, findLinks, findText, findImages) {
 }
 
 // ============================================
+// WAIT FOR PAGE LOAD
+// ============================================
+function waitForPageLoad(maxWait = 3000) {
+    return new Promise((resolve) => {
+        console.log('Waiting for page to load...');
+        
+        const startTime = Date.now();
+        const checkInterval = setInterval(() => {
+            const loaded = document.readyState === 'complete';
+            const hasContent = document.body.innerText.length > 500;
+            const elapsed = Date.now() - startTime;
+            
+            console.log(`  Status: readyState=${document.readyState}, hasContent=${hasContent}, elapsed=${elapsed}ms`);
+            
+            if ((loaded && hasContent) || elapsed > maxWait) {
+                clearInterval(checkInterval);
+                console.log('Page ready, proceeding with extraction');
+                resolve();
+            }
+        }, 200);
+    });
+}
+
+// ============================================
 // EXTRACT FUNCTION (az oldalon futó kód)
 // ============================================
-function extractOnPage(findLinks, findText, findImages) {
+async function extractOnPage(findLinks, findText, findImages) {
     console.log('=== extractOnPage running ===');
     console.log('Parameters:', { findLinks, findText, findImages });
+    
+    // Várunk az oldal betöltésére
+    await waitForPageLoad(3000);
     
     let documents = [];
     
@@ -153,27 +180,48 @@ function extractOnPage(findLinks, findText, findImages) {
             documents = documents.concat(links);
         }
         
-        // SZÖVEGEK
+        // SZÖVEGEK + ÁRAK
         if (findText) {
-            console.log('→ Extracting text...');
+            console.log('→ Extracting text and prices...');
             const texts = [];
-            const keywords = ['dokumentum', 'termék', 'ár', 'price', 'product', 'file', 'pdf'];
             
-            document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div, td').forEach((el) => {
+            // Árak keresése
+            const priceRegex = /\d+\s*[FfFt]{2}|\d+\s*€|\d+\s*Ft|\d+\s*ft/g;
+            const pageText = document.body.innerText;
+            const prices = pageText.match(priceRegex) || [];
+            
+            console.log('  Found prices:', prices.length);
+            prices.slice(0, 50).forEach((price) => {
+                texts.push({
+                    name: price.trim(),
+                    type: 'Ár',
+                    url: window.location.href,
+                    source: 'price'
+                });
+            });
+            
+            // Termékok/szövegek keresése
+            const keywords = ['kandallo', 'termék', 'ár', 'price', 'product', 'file', 'pdf', 'sparhelt', 'kemence', 'grill'];
+            
+            document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, div').forEach((el) => {
                 try {
                     const text = el.textContent.trim();
-                    if (text.length < 5 || text.length > 300) return;
+                    if (text.length < 5 || text.length > 200) return;
+                    
+                    // Szűrés: csak egy szó egy div-ből, redundancia elkerülésé
+                    const wordCount = text.split(/\s+/).length;
+                    if (wordCount > 50) return; // Túl hosszú
                     
                     if (keywords.some(kw => text.toLowerCase().includes(kw))) {
                         texts.push({
                             name: text.substring(0, 150),
-                            type: 'Text',
+                            type: 'Termék',
                             url: window.location.href,
                             source: 'text'
                         });
                     }
                 } catch (e) {
-                    console.error('Text error:', e);
+                    // Silent
                 }
             });
             
