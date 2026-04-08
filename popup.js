@@ -283,39 +283,84 @@ function updateUI() {
 // ============================================
 
 function exportToExcel() {
-    if (extractedDocuments.length === 0) {
+    console.log('=== exportToExcel START ===');
+    console.log('Documents to export:', extractedDocuments.length);
+    
+    if (!extractedDocuments || extractedDocuments.length === 0) {
         showStatus('Nincs mit exportálni!', 'error');
+        console.warn('Nincs dokumentum az exportáláshoz!');
         return;
     }
     
-    const filenameEl = document.getElementById('filename');
-    const filename = (filenameEl && filenameEl.value) || 'dokumentumok';
-    
-    let csv = 'Dokumentum Név,Típus,URL,Forrás\n';
-    
-    extractedDocuments.forEach(doc => {
-        const name = (doc.name || '').replace(/"/g, '""').replace(/\n/g, ' ');
-        const type = (doc.type || '').replace(/"/g, '""');
-        const url = (doc.url || '').replace(/"/g, '""');
-        const source = (doc.source || '').replace(/"/g, '""');
+    try {
+        const filenameEl = document.getElementById('filename');
+        const filename = (filenameEl && filenameEl.value) || 'dokumentumok';
         
-        csv += `"${name}","${type}","${url}","${source}"\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const urlObj = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', urlObj);
-    link.setAttribute('download', `${filename}.csv`);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    URL.revokeObjectURL(urlObj);
-    showStatus('Excel letöltve!', 'success');
+        console.log('Filename:', filename);
+        
+        // CSV fejléc
+        let csv = 'Dokumentum Név,Típus,URL,Forrás\n';
+        
+        // Adatok hozzáadása
+        extractedDocuments.forEach((doc, index) => {
+            try {
+                const name = (doc.name || '').replace(/"/g, '""').replace(/\n/g, ' ').substring(0, 200);
+                const type = (doc.type || '').replace(/"/g, '""');
+                const url = (doc.url || '').replace(/"/g, '""');
+                const source = (doc.source || 'ismeretlen').replace(/"/g, '""');
+                
+                csv += `"${name}","${type}","${url}","${source}"\n`;
+                
+                if (index < 5) {
+                    console.log(`Row ${index}:`, name.substring(0, 50));
+                }
+            } catch (e) {
+                console.error('Row error:', e);
+            }
+        });
+        
+        console.log('CSV generated, size:', csv.length);
+        console.log('CSV preview:', csv.substring(0, 200));
+        
+        // Blob és download
+        const BOM = '\uFEFF'; // UTF-8 BOM az Excel-nek
+        const blob = new Blob([BOM + csv], { 
+            type: 'text/csv;charset=utf-8;' 
+        });
+        
+        console.log('Blob created, size:', blob.size);
+        
+        const urlObj = URL.createObjectURL(blob);
+        console.log('ObjectURL created:', urlObj);
+        
+        const link = document.createElement('a');
+        link.setAttribute('href', urlObj);
+        link.setAttribute('download', `${filename}.csv`);
+        link.style.visibility = 'hidden';
+        
+        console.log('Link created, appending to body');
+        
+        document.body.appendChild(link);
+        
+        console.log('Clicking download link...');
+        link.click();
+        
+        console.log('Removing link and revoking URL');
+        
+        // Cleanup
+        setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(urlObj);
+            console.log('Cleanup done');
+        }, 100);
+        
+        showStatus(`${filename}.csv sikeresen letöltve! (${extractedDocuments.length} sor)`, 'success');
+        console.log('=== exportToExcel SUCCESS ===');
+        
+    } catch (error) {
+        console.error('Export error:', error);
+        showStatus('Export hiba: ' + error.message, 'error');
+    }
 }
 
 // ============================================
