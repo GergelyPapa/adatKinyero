@@ -1,12 +1,12 @@
 // ============================================
-// Document Extractor - Popup Script v3
-// FIX: chrome.scripting API (Manifest v3)
+// Document Extractor - Popup Script v4
+// SIMPLE & DEBUG VERSION
 // ============================================
 
 let extractedDocuments = [];
 
 // ============================================
-// DOKUMENTUMOK LEKÉRÉSE
+// MAIN: DOKUMENTUMOK LEKÉRÉSE
 // ============================================
 function extractDocuments() {
     console.log('=== EXTRACTION START ===');
@@ -28,220 +28,206 @@ function extractDocuments() {
         if (!tabs || tabs.length === 0) {
             showLoading(false);
             showStatus('Hiba: Nincs aktív tab!', 'error');
+            console.error('No active tab found!');
             return;
         }
         
         const tabId = tabs[0].id;
-        console.log('Tab ID:', tabId);
+        const tabUrl = tabs[0].url;
+        console.log('Tab ID:', tabId, 'URL:', tabUrl);
         
-        // Közvetlen injekció és végrehajtás
+        // Egyszerű test: számokat jár az oldal?
         chrome.scripting.executeScript({
             target: { tabId: tabId },
-            function: extractOnPage,
-            args: [findLinks, findText, findImages]
+            function: simpleTest
         }, (results) => {
-            console.log('Injection results:', results);
+            console.log('Test results:', results);
             
             if (chrome.runtime.lastError) {
-                console.error('Injection error:', chrome.runtime.lastError);
+                console.error('Runtime error:', chrome.runtime.lastError);
                 showLoading(false);
-                showStatus('Injekció hiba: ' + chrome.runtime.lastError.message, 'error');
+                showStatus('Script injection hiba: ' + chrome.runtime.lastError.message, 'error');
                 return;
             }
             
-            if (results && results.length > 0 && results[0].result) {
-                const docs = results[0].result;
-                console.log('Documents received:', docs.length, docs);
-                
-                extractedDocuments = docs;
-                showLoading(false);
-                updateUI();
-            } else {
-                console.warn('No results from injection');
-                showLoading(false);
-                showStatus('Nincs eredmény az injekciótól', 'error');
+            if (results && results[0]) {
+                console.log('Test OK, result:', results[0].result);
+                // Most az igazi extrakció
+                actualExtraction(tabId, findLinks, findText, findImages);
             }
         });
     });
 }
 
 // ============================================
-// INJEKTÁLANDÓ FUNKCIÓ
+// TEST: Valóban fut-e a script az oldalon?
+// ============================================
+function simpleTest() {
+    console.log('TEST: Script futott az oldalon!');
+    console.log('Document title:', document.title);
+    console.log('Links count:', document.querySelectorAll('a[href]').length);
+    console.log('Paragraphs count:', document.querySelectorAll('p').length);
+    console.log('Images count:', document.querySelectorAll('img').length);
+    
+    return {
+        title: document.title,
+        linksCount: document.querySelectorAll('a[href]').length,
+        paragraphsCount: document.querySelectorAll('p').length,
+        imagesCount: document.querySelectorAll('img').length
+    };
+}
+
+// ============================================
+// IGAZI EXTRAKCIÓ (2. lépésben)
+// ============================================
+function actualExtraction(tabId, findLinks, findText, findImages) {
+    console.log('=== Starting actual extraction ===');
+    
+    chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        function: extractOnPage,
+        args: [findLinks, findText, findImages]
+    }, (results) => {
+        console.log('Extraction results:', results);
+        showLoading(false);
+        
+        if (chrome.runtime.lastError) {
+            console.error('Extraction error:', chrome.runtime.lastError);
+            showStatus('Extrakció hiba: ' + chrome.runtime.lastError.message, 'error');
+            return;
+        }
+        
+        if (results && results[0] && results[0].result) {
+            const docs = results[0].result;
+            console.log('Documents received:', docs.length);
+            console.log('Documents:', docs);
+            
+            extractedDocuments = docs;
+            updateUI();
+        } else {
+            console.warn('No result from extraction');
+            showStatus('Nincs eredmény az extrakciótól!', 'error');
+        }
+    });
+}
+
+// ============================================
+// EXTRACT FUNCTION (az oldalon futó kód)
 // ============================================
 function extractOnPage(findLinks, findText, findImages) {
-    console.log('=== extractOnPage futott ===');
+    console.log('=== extractOnPage running ===');
     console.log('Parameters:', { findLinks, findText, findImages });
     
     let documents = [];
     
     try {
+        // LINKEK
         if (findLinks) {
-            console.log('→ Linkek keresése...');
-            const links = extractLinks();
-            console.log('  Talált:', links.length);
+            console.log('→ Extracting links...');
+            const links = [];
+            
+            document.querySelectorAll('a[href]').forEach((link) => {
+                try {
+                    const href = link.getAttribute('href');
+                    const text = link.textContent.trim();
+                    
+                    if (!href) return;
+                    
+                    let fullUrl = href;
+                    if (!href.startsWith('http')) {
+                        fullUrl = new URL(href, window.location.href).href;
+                    }
+                    
+                    links.push({
+                        name: text || 'Link',
+                        type: 'Link',
+                        url: fullUrl,
+                        source: 'link'
+                    });
+                } catch (e) {
+                    console.error('Link error:', e);
+                }
+            });
+            
+            console.log('  Found links:', links.length);
             documents = documents.concat(links);
         }
         
+        // SZÖVEGEK
         if (findText) {
-            console.log('→ Szövegek keresése...');
-            const texts = extractTextDocuments();
-            console.log('  Talált:', texts.length);
+            console.log('→ Extracting text...');
+            const texts = [];
+            const keywords = ['dokumentum', 'termék', 'ár', 'price', 'product', 'file', 'pdf'];
+            
+            document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div, td').forEach((el) => {
+                try {
+                    const text = el.textContent.trim();
+                    if (text.length < 5 || text.length > 300) return;
+                    
+                    if (keywords.some(kw => text.toLowerCase().includes(kw))) {
+                        texts.push({
+                            name: text.substring(0, 150),
+                            type: 'Text',
+                            url: window.location.href,
+                            source: 'text'
+                        });
+                    }
+                } catch (e) {
+                    console.error('Text error:', e);
+                }
+            });
+            
+            console.log('  Found texts:', texts.length);
             documents = documents.concat(texts);
         }
         
+        // KÉPEK
         if (findImages) {
-            console.log('→ Képek keresése...');
-            const images = extractImages();
-            console.log('  Talált:', images.length);
+            console.log('→ Extracting images...');
+            const images = [];
+            
+            document.querySelectorAll('img').forEach((img) => {
+                try {
+                    const src = img.getAttribute('src');
+                    const alt = img.getAttribute('alt');
+                    
+                    if (!src) return;
+                    
+                    let fullUrl = src;
+                    if (!src.startsWith('http')) {
+                        fullUrl = new URL(src, window.location.href).href;
+                    }
+                    
+                    images.push({
+                        name: alt || 'Image',
+                        type: '.jpg',
+                        url: fullUrl,
+                        source: 'image'
+                    });
+                } catch (e) {
+                    console.error('Image error:', e);
+                }
+            });
+            
+            console.log('  Found images:', images.length);
             documents = documents.concat(images);
         }
         
+        // DEDUPE
         documents = removeDuplicates(documents);
         
-        console.log('✅ Végeredmény:', documents.length, 'dokumentum');
+        console.log('Final result:', documents.length, 'documents');
         return documents;
         
     } catch (error) {
-        console.error('❌ Extrakció hiba:', error);
+        console.error('Fatal error in extractOnPage:', error);
         return [];
     }
 }
 
 // ============================================
-// LINKEK KERESÉSE
+// DEDUPLICATE
 // ============================================
-function extractLinks() {
-    const links = [];
-    const documentExtensions = [
-        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-        '.txt', '.csv', '.xml', '.json', '.zip', '.rar', '.7z',
-        '.jpg', '.png', '.gif', '.bmp', '.svg', '.webp'
-    ];
-    
-    document.querySelectorAll('a[href]').forEach((link) => {
-        try {
-            const href = link.getAttribute('href');
-            const text = link.textContent.trim();
-            
-            if (!href || href.length === 0) return;
-            
-            let fullUrl = href;
-            if (!href.startsWith('http')) {
-                fullUrl = new URL(href, window.location.href).href;
-            }
-            
-            const extension = getFileExtension(fullUrl);
-            const isDocument = documentExtensions.some(ext => 
-                fullUrl.toLowerCase().includes(ext)
-            );
-            
-            const textLower = text.toLowerCase();
-            
-            if (isDocument || textLower.includes('download') || 
-                textLower.includes('dokumentum') ||
-                textLower.includes('file') ||
-                textLower.includes('letölt')) {
-                
-                links.push({
-                    name: text || getFilenameFromUrl(fullUrl) || 'Link',
-                    type: extension || 'Link',
-                    url: fullUrl,
-                    source: 'link'
-                });
-            }
-        } catch (e) {
-            console.error('Link parse error:', e);
-        }
-    });
-    
-    return links;
-}
-
-// ============================================
-// SZÖVEGEK KERESÉSE
-// ============================================
-function extractTextDocuments() {
-    const documents = [];
-    const keywords = [
-        'dokumentum', 'fájl', 'letöltés', 'report', 'invoice',
-        'számlá', 'szerződés', 'termék', 'ár', 'price', 'product'
-    ];
-    
-    document.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, td, li, button, a').forEach((el) => {
-        try {
-            const text = el.textContent.trim();
-            
-            if (text.length < 3 || text.length > 200) return;
-            
-            const textLower = text.toLowerCase();
-            
-            if (keywords.some(kw => textLower.includes(kw))) {
-                documents.push({
-                    name: text.substring(0, 150),
-                    type: 'Szöveg',
-                    url: window.location.href,
-                    source: 'text'
-                });
-            }
-        } catch (e) {
-            console.error('Text parse error:', e);
-        }
-    });
-    
-    return documents;
-}
-
-// ============================================
-// KÉPEK KERESÉSE
-// ============================================
-function extractImages() {
-    const images = [];
-    
-    document.querySelectorAll('img').forEach((img) => {
-        try {
-            const src = img.getAttribute('src');
-            const alt = img.getAttribute('alt');
-            
-            if (!src) return;
-            
-            let fullUrl = src;
-            if (!src.startsWith('http')) {
-                fullUrl = new URL(src, window.location.href).href;
-            }
-            
-            // Csak nagyobb képek
-            if (img.width < 50 || img.height < 50) return;
-            
-            images.push({
-                name: alt || getFilenameFromUrl(src) || 'Kép',
-                type: getFileExtension(src),
-                url: fullUrl,
-                source: 'image'
-            });
-        } catch (e) {
-            console.error('Image parse error:', e);
-        }
-    });
-    
-    return images;
-}
-
-// ============================================
-// SEGÉDFÜGGVÉNYEK
-// ============================================
-
-function getFileExtension(url) {
-    const path = url.split('?')[0];
-    const parts = path.split('.');
-    return parts.length > 1 ? '.' + parts[parts.length - 1].toLowerCase() : '';
-}
-
-function getFilenameFromUrl(url) {
-    const path = url.split('?')[0];
-    const parts = path.split('/');
-    return parts[parts.length - 1] || '';
-}
-
 function removeDuplicates(documents) {
     const seen = new Set();
     return documents.filter(doc => {
@@ -255,16 +241,15 @@ function removeDuplicates(documents) {
 }
 
 // ============================================
-// UI FRISSÍTÉS
+// UI UPDATE
 // ============================================
-
 function updateUI() {
     const count = extractedDocuments.length;
     const info = document.getElementById('doc-info');
     const exportBtn = document.getElementById('export-btn');
     
     if (!info || !exportBtn) {
-        console.warn('UI elemek nem találva');
+        console.warn('UI elements not found');
         return;
     }
     
@@ -274,88 +259,55 @@ function updateUI() {
     } else {
         info.innerHTML = `✅ Talált dokumentumok: <strong>${count}</strong>`;
         exportBtn.disabled = false;
-        showStatus(`${count} dokumentum sikeresen lekérve!`, 'success');
+        showStatus(`${count} dokumentum lekérve!`, 'success');
     }
 }
 
 // ============================================
 // EXCEL EXPORT
 // ============================================
-
 function exportToExcel() {
-    console.log('=== exportToExcel START ===');
-    console.log('Documents to export:', extractedDocuments.length);
+    console.log('=== EXPORT START ===');
+    console.log('Documents:', extractedDocuments.length);
     
     if (!extractedDocuments || extractedDocuments.length === 0) {
-        showStatus('Nincs mit exportálni!', 'error');
-        console.warn('Nincs dokumentum az exportáláshoz!');
+        showStatus('Nincs dokumentum az exportáláshoz!', 'error');
         return;
     }
     
     try {
-        const filenameEl = document.getElementById('filename');
-        const filename = (filenameEl && filenameEl.value) || 'dokumentumok';
+        const filename = document.getElementById('filename')?.value || 'dokumentumok';
         
-        console.log('Filename:', filename);
-        
-        // CSV fejléc
         let csv = 'Dokumentum Név,Típus,URL,Forrás\n';
         
-        // Adatok hozzáadása
-        extractedDocuments.forEach((doc, index) => {
-            try {
-                const name = (doc.name || '').replace(/"/g, '""').replace(/\n/g, ' ').substring(0, 200);
-                const type = (doc.type || '').replace(/"/g, '""');
-                const url = (doc.url || '').replace(/"/g, '""');
-                const source = (doc.source || 'ismeretlen').replace(/"/g, '""');
-                
-                csv += `"${name}","${type}","${url}","${source}"\n`;
-                
-                if (index < 5) {
-                    console.log(`Row ${index}:`, name.substring(0, 50));
-                }
-            } catch (e) {
-                console.error('Row error:', e);
-            }
+        extractedDocuments.forEach((doc) => {
+            const name = (doc.name || '').replace(/"/g, '""').replace(/\n/g, ' ').substring(0, 200);
+            const type = (doc.type || '').replace(/"/g, '""');
+            const url = (doc.url || '').replace(/"/g, '""');
+            const source = (doc.source || 'unknown').replace(/"/g, '""');
+            
+            csv += `"${name}","${type}","${url}","${source}"\n`;
         });
         
-        console.log('CSV generated, size:', csv.length);
-        console.log('CSV preview:', csv.substring(0, 200));
-        
-        // Blob és download
-        const BOM = '\uFEFF'; // UTF-8 BOM az Excel-nek
-        const blob = new Blob([BOM + csv], { 
-            type: 'text/csv;charset=utf-8;' 
-        });
-        
-        console.log('Blob created, size:', blob.size);
-        
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
         const urlObj = URL.createObjectURL(blob);
-        console.log('ObjectURL created:', urlObj);
         
         const link = document.createElement('a');
         link.setAttribute('href', urlObj);
         link.setAttribute('download', `${filename}.csv`);
         link.style.visibility = 'hidden';
         
-        console.log('Link created, appending to body');
-        
         document.body.appendChild(link);
-        
-        console.log('Clicking download link...');
         link.click();
         
-        console.log('Removing link and revoking URL');
-        
-        // Cleanup
         setTimeout(() => {
             document.body.removeChild(link);
             URL.revokeObjectURL(urlObj);
-            console.log('Cleanup done');
         }, 100);
         
-        showStatus(`${filename}.csv sikeresen letöltve! (${extractedDocuments.length} sor)`, 'success');
-        console.log('=== exportToExcel SUCCESS ===');
+        showStatus(`${filename}.csv letöltve!`, 'success');
+        console.log('=== EXPORT SUCCESS ===');
         
     } catch (error) {
         console.error('Export error:', error);
@@ -364,9 +316,8 @@ function exportToExcel() {
 }
 
 // ============================================
-// EREDMÉNYEK TÖRLÉSE
+// CLEAR RESULTS
 // ============================================
-
 function clearResults() {
     extractedDocuments = [];
     const info = document.getElementById('doc-info');
@@ -383,13 +334,12 @@ function clearResults() {
 }
 
 // ============================================
-// STATUS ÜZENET
+// STATUS MESSAGE
 // ============================================
-
 function showStatus(message, type = 'info') {
     const statusEl = document.getElementById('status');
     if (!statusEl) {
-        console.warn('Status element nem található');
+        console.warn('Status element not found');
         return;
     }
     
@@ -405,9 +355,8 @@ function showStatus(message, type = 'info') {
 }
 
 // ============================================
-// LOADING ANIMÁCIÓ
+// LOADING ANIMATION
 // ============================================
-
 function showLoading(show) {
     const loading = document.getElementById('loading');
     if (loading) {
@@ -420,9 +369,8 @@ function showLoading(show) {
 }
 
 // ============================================
-// HALADÓ BEÁLLÍTÁSOK TOGGLE
+// TOGGLE SETTINGS
 // ============================================
-
 function toggleSettings() {
     const settings = document.getElementById('settings');
     if (settings) {
@@ -431,62 +379,39 @@ function toggleSettings() {
 }
 
 // ============================================
-// INICIALIZÁLÁS
+// EVENT LISTENERS (DOMContentLoaded)
 // ============================================
-
-// ============================================
-// EVENT LISTENER HOZZÁADÁSA (CSP compliance)
-// ============================================
-
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('=== Popup Loading ===');
+    console.log('=== Popup DOMContentLoaded ===');
     
-    // Extract button (ID-vel, nem class-szal!)
+    // Extract button
     const extractBtn = document.getElementById('extract-btn');
     if (extractBtn) {
-        extractBtn.addEventListener('click', () => {
-            console.log('Extract button clicked');
-            extractDocuments();
-        });
+        extractBtn.addEventListener('click', extractDocuments);
         console.log('✓ Extract button listener added');
     } else {
         console.error('❌ Extract button NOT found!');
     }
     
-    // Settings toggle button
+    // Settings toggle
     const settingsBtn = document.getElementById('settings-toggle-btn');
     if (settingsBtn) {
-        settingsBtn.addEventListener('click', () => {
-            console.log('Settings toggle clicked');
-            toggleSettings();
-        });
+        settingsBtn.addEventListener('click', toggleSettings);
         console.log('✓ Settings toggle listener added');
-    } else {
-        console.error('❌ Settings toggle button NOT found!');
     }
     
     // Export button
     const exportBtn = document.getElementById('export-btn');
     if (exportBtn) {
-        exportBtn.addEventListener('click', () => {
-            console.log('Export button clicked');
-            exportToExcel();
-        });
+        exportBtn.addEventListener('click', exportToExcel);
         console.log('✓ Export button listener added');
-    } else {
-        console.error('❌ Export button NOT found!');
     }
     
     // Clear button
     const clearBtn = document.getElementById('clear-btn');
     if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            console.log('Clear button clicked');
-            clearResults();
-        });
+        clearBtn.addEventListener('click', clearResults);
         console.log('✓ Clear button listener added');
-    } else {
-        console.error('❌ Clear button NOT found!');
     }
     
     console.log('=== Popup Ready ===');
