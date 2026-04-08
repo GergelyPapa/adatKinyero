@@ -264,7 +264,7 @@ function updateUI() {
 }
 
 // ============================================
-// EXCEL EXPORT
+// EXCEL EXPORT (Chrome downloads API)
 // ============================================
 function exportToExcel() {
     console.log('=== EXPORT START ===');
@@ -272,42 +272,67 @@ function exportToExcel() {
     
     if (!extractedDocuments || extractedDocuments.length === 0) {
         showStatus('Nincs dokumentum az exportáláshoz!', 'error');
+        console.warn('No documents to export');
         return;
     }
     
     try {
         const filename = document.getElementById('filename')?.value || 'dokumentumok';
         
+        console.log('Creating CSV...');
         let csv = 'Dokumentum Név,Típus,URL,Forrás\n';
         
-        extractedDocuments.forEach((doc) => {
-            const name = (doc.name || '').replace(/"/g, '""').replace(/\n/g, ' ').substring(0, 200);
-            const type = (doc.type || '').replace(/"/g, '""');
-            const url = (doc.url || '').replace(/"/g, '""');
+        extractedDocuments.forEach((doc, idx) => {
+            const name = (doc.name || 'N/A').replace(/"/g, '""').replace(/\n/g, ' ').substring(0, 200);
+            const type = (doc.type || 'N/A').replace(/"/g, '""');
+            const url = (doc.url || 'N/A').replace(/"/g, '""');
             const source = (doc.source || 'unknown').replace(/"/g, '""');
             
             csv += `"${name}","${type}","${url}","${source}"\n`;
+            
+            if (idx < 3) {
+                console.log(`Row ${idx}: ${name.substring(0, 50)}`);
+            }
         });
         
+        console.log('CSV created, size:', csv.length, 'bytes');
+        
+        // UTF-8 BOM
         const BOM = '\uFEFF';
-        const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
-        const urlObj = URL.createObjectURL(blob);
+        const csvWithBom = BOM + csv;
         
-        const link = document.createElement('a');
-        link.setAttribute('href', urlObj);
-        link.setAttribute('download', `${filename}.csv`);
-        link.style.visibility = 'hidden';
+        console.log('Converting to blob...');
+        const blob = new Blob([csvWithBom], { type: 'text/csv;charset=utf-8;' });
+        console.log('Blob size:', blob.size, 'bytes');
         
-        document.body.appendChild(link);
-        link.click();
+        // Blob URL-t készítünk
+        const blobUrl = URL.createObjectURL(blob);
+        console.log('Blob URL:', blobUrl);
         
-        setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(urlObj);
-        }, 100);
-        
-        showStatus(`${filename}.csv letöltve!`, 'success');
-        console.log('=== EXPORT SUCCESS ===');
+        // Chrome downloads API használata
+        console.log('Using chrome.downloads.download...');
+        chrome.downloads.download({
+            url: blobUrl,
+            filename: `${filename}.csv`,
+            saveAs: false
+        }, (downloadId) => {
+            if (chrome.runtime.lastError) {
+                console.error('Download error:', chrome.runtime.lastError);
+                showStatus('Letöltés hiba: ' + chrome.runtime.lastError.message, 'error');
+                URL.revokeObjectURL(blobUrl);
+                return;
+            }
+            
+            console.log('Download started, ID:', downloadId);
+            showStatus(`${filename}.csv letöltve! (ID: ${downloadId})`, 'success');
+            console.log('=== EXPORT SUCCESS ===');
+            
+            // Cleanup után egy pár másodperccel
+            setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+                console.log('Blob URL revoked');
+            }, 2000);
+        });
         
     } catch (error) {
         console.error('Export error:', error);
